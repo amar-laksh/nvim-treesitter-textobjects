@@ -57,19 +57,25 @@
 
 ;; loops
 (loop_expression
-  (_)? @loop.inner) @loop.outer
+  body: (block . "{" . (_) @_start [(_)","]? @_end . "}"
+  (#make-range! "loop.inner" @_start @_end))) @loop.outer
 
 (while_expression
-  (_)? @loop.inner) @loop.outer
+  body: (block . "{" . (_) @_start [(_)","]? @_end . "}"
+  (#make-range! "loop.inner" @_start @_end))) @loop.outer
 
 (for_expression
-  body: (block)? @loop.inner) @loop.outer
+  body: (block . "{" . (_) @_start [(_)","]? @_end . "}"
+  (#make-range! "loop.inner" @_start @_end))) @loop.outer
 
 ;; blocks
 (_ (block) @block.inner) @block.outer
 (unsafe_block (_)? @block.inner) @block.outer
 
 ;; calls
+(macro_invocation) @call.outer
+(macro_invocation (token_tree . "(" . (_) @_start (_)? @_end . ")"
+  (#make-range! "call.inner" @_start @_end)))
 (call_expression) @call.outer
 (call_expression
   arguments: (arguments . "(" . (_) @_start (_)? @_end . ")"
@@ -93,6 +99,13 @@
  (#make-range! "parameter.outer" @_start @parameter.inner))
 ((parameters
   . (parameter) @parameter.inner . ","? @_end)
+ (#make-range! "parameter.outer" @parameter.inner @_end))
+
+((parameters
+  "," @_start . (type_identifier) @parameter.inner)
+ (#make-range! "parameter.outer" @_start @parameter.inner))
+((parameters
+  . (type_identifier) @parameter.inner . ","? @_end)
  (#make-range! "parameter.outer" @parameter.inner @_end))
 
 ((type_parameters
@@ -126,6 +139,13 @@
   . ","? @_end
  (#make-range! "parameter.outer" @parameter.inner @_end))
 
+((tuple_type
+  "," @_start . (_) @parameter.inner)
+ (#make-range! "parameter.outer" @_start @parameter.inner))
+((tuple_type
+  . (_) @parameter.inner . ","? @_end)
+ (#make-range! "parameter.outer" @parameter.inner @_end))
+
 (struct_item
   body: (field_declaration_list
     "," @_start
@@ -170,6 +190,20 @@
 ((type_arguments
   . (_) @parameter.inner . ","? @_end)
  (#make-range! "parameter.outer" @parameter.inner @_end))
+
+((token_tree
+  "," @_start . (_) @parameter.inner)
+ (#make-range! "parameter.outer" @_start @parameter.inner))
+((token_tree
+  . (_) @parameter.inner . ","? @_end)
+ (#make-range! "parameter.outer" @parameter.inner @_end))
+
+(scoped_use_list
+  list: (use_list "," @_start . (_) @parameter.inner
+    (#make-range! "parameter.outer" @_start @parameter.inner)))
+(scoped_use_list
+  list: (use_list . (_) @parameter.inner . ","? @_end
+    (#make-range! "parameter.outer" @parameter.inner @_end)))
 
 [
   (integer_literal)

@@ -3,6 +3,7 @@ local api = vim.api
 local parsers = require "nvim-treesitter.parsers"
 local queries = require "nvim-treesitter.query"
 local ts_utils = require "nvim-treesitter.ts_utils"
+local ts = require "nvim-treesitter.compat"
 
 local M = {}
 
@@ -10,6 +11,63 @@ if not unpack then
   -- luacheck: push ignore 121
   unpack = table.unpack
   -- luacheck: pop
+end
+
+--- Similar functions from vim.treesitter, but it accepts node as table type, not necessarily a TSNode
+local function _cmp_pos(a_row, a_col, b_row, b_col)
+  if a_row == b_row then
+    if a_col > b_col then
+      return 1
+    elseif a_col < b_col then
+      return -1
+    else
+      return 0
+    end
+  elseif a_row > b_row then
+    return 1
+  end
+
+  return -1
+end
+
+local cmp_pos = {
+  lt = function(...)
+    return _cmp_pos(...) == -1
+  end,
+  le = function(...)
+    return _cmp_pos(...) ~= 1
+  end,
+  gt = function(...)
+    return _cmp_pos(...) == 1
+  end,
+  ge = function(...)
+    return _cmp_pos(...) ~= -1
+  end,
+  eq = function(...)
+    return _cmp_pos(...) == 0
+  end,
+  ne = function(...)
+    return _cmp_pos(...) ~= 0
+  end,
+}
+
+-- This can be replaced to vim.treesitter.node_contains once Neovim 0.9 is released
+-- In 0.8, it only accepts TSNode type and sometimes it causes issues.
+function M.node_contains(node, range)
+  local srow_1, scol_1, erow_1, ecol_1 = node:range()
+  local srow_2, scol_2, erow_2, ecol_2 = unpack(range)
+
+  -- start doesn't fit
+  if cmp_pos.gt(srow_1, scol_1, srow_2, scol_2) then
+    return false
+  end
+
+  -- end doesn't fit
+  if cmp_pos.lt(erow_1, ecol_1, erow_2, ecol_2) then
+    return false
+  end
+
+  return true
 end
 
 -- Convert single query string to list for backwards compatibility and the Vim commands
@@ -38,7 +96,7 @@ end
 function M.available_textobjects(lang, query_group)
   lang = lang or parsers.get_buf_lang()
   query_group = query_group or "textobjects"
-  local parsed_queries = queries.get_query(lang, query_group)
+  local parsed_queries = ts.get_query(lang, query_group)
   if not parsed_queries then
     return {}
   end
@@ -209,7 +267,7 @@ function M.textobject_at_point(query_string, query_group, pos, bufnr, opts)
 
     local matches_within_outer = {}
     for _, match in ipairs(matches) do
-      if vim.treesitter.node_contains(node_outer, { match.node:range() }) then
+      if M.node_contains(node_outer, { match.node:range() }) then
         table.insert(matches_within_outer, match)
       end
     end
@@ -253,6 +311,7 @@ function M.next_textobject(node, query_string, query_group, same_parent, overlap
   local search_start, _
   if overlapping_range_ok then
     _, _, search_start = node:start()
+    search_start = search_start + 1
   else
     _, _, search_start = node:end_()
   end
@@ -263,7 +322,7 @@ function M.next_textobject(node, query_string, query_group, same_parent, overlap
     if not same_parent or node:parent() == match.node:parent() then
       local _, _, start = match.node:start()
       local _, _, end_ = match.node:end_()
-      return start > search_start and end_ >= node_end
+      return start >= search_start and end_ >= node_end
     end
   end
   local function scoring_function(match)
@@ -273,7 +332,9 @@ function M.next_textobject(node, query_string, query_group, same_parent, overlap
 
   local next_node = queries.find_best_match(bufnr, query_string, query_group, filter_function, scoring_function)
 
-  return next_node and next_node.node
+  if next_node then
+    return next_node.node, next_node.metadata
+  end
 end
 
 function M.previous_textobject(node, query_string, query_group, same_parent, overlapping_range_ok, bufnr)
@@ -288,7 +349,7 @@ function M.previous_textobject(node, query_string, query_group, same_parent, ove
   local search_end, _
   if overlapping_range_ok then
     _, _, search_end = node:end_()
-    search_end = search_end + 1
+    search_end = search_end - 1
   else
     _, _, search_end = node:start()
   end
@@ -297,7 +358,7 @@ function M.previous_textobject(node, query_string, query_group, same_parent, ove
     if not same_parent or node:parent() == match.node:parent() then
       local _, _, end_ = match.node:end_()
       local _, _, start = match.node:start()
-      return end_ < search_end and start < node_start
+      return end_ <= search_end and start < node_start
     end
   end
 
@@ -308,7 +369,9 @@ function M.previous_textobject(node, query_string, query_group, same_parent, ove
 
   local previous_node = queries.find_best_match(bufnr, query_string, query_group, filter_function, scoring_function)
 
-  return previous_node and previous_node.node
+  if previous_node then
+    return previous_node.node, previous_node.metadata
+  end
 end
 
 return M

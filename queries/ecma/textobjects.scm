@@ -1,14 +1,14 @@
 (function_declaration
   body: (statement_block)) @function.outer
 
-(function
+(function_expression
   body: (statement_block)) @function.outer
 
 (function_declaration
   body: (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
  (#make-range! "function.inner" @_start @_end)))
 
-(function
+(function_expression
   body: (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
  (#make-range! "function.inner" @_start @_end)))
 
@@ -36,20 +36,30 @@
   (class_declaration) @class.outer) @class.outer.start
 
 (for_in_statement
-  body: (_)? @loop.inner) @loop.outer
+  body: (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
+  (#make-range! "loop.inner" @_start @_end))) @loop.outer
 
 (for_statement
-  body: (_)? @loop.inner) @loop.outer
+  body: (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
+  (#make-range! "loop.inner" @_start @_end))) @loop.outer
 
 (while_statement
-  body: (_)? @loop.inner) @loop.outer
+  body: (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
+  (#make-range! "loop.inner" @_start @_end))) @loop.outer
 
 (do_statement
-  body: (_)? @loop.inner) @loop.outer
+  body: (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
+  (#make-range! "loop.inner" @_start @_end))) @loop.outer
 
 (if_statement
-  consequence: (_)? @conditional.inner
-  alternative: (_)? @conditional.inner) @conditional.outer
+  consequence: (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
+  (#make-range! "conditional.inner" @_start @_end))) @conditional.outer
+
+(if_statement
+  alternative: (else_clause (statement_block . "{" . (_) @_start @_end (_)? @_end . "}"
+  (#make-range! "conditional.inner" @_start @_end)))) @conditional.outer
+
+(if_statement) @conditional.outer
 
 (switch_statement
   body: (_)? @conditional.inner) @conditional.outer
@@ -58,6 +68,12 @@
 (call_expression
   arguments: (arguments . "(" . (_) @_start (_)? @_end . ")"
   (#make-range! "call.inner" @_start @_end)))
+
+((new_expression
+  constructor: (identifier) @_cons
+  arguments: (arguments . "(" . (_) @_start (_)? @_end . ")") @_args)
+ (#make-range! "call.outer" @_cons @_args)
+ (#make-range! "call.inner" @_start @_end))
 
 ;; blocks
 (_ (statement_block) @block.inner) @block.outer
@@ -115,3 +131,8 @@
 
 (variable_declarator
  name: (_) @assignment.inner)
+
+(object
+  (pair
+    key: (_) @assignment.lhs
+    value: (_) @assignment.inner @assignment.rhs) @assignment.outer)
